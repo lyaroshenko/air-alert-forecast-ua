@@ -235,6 +235,11 @@ python -m venv .venv
 `src.evaluate --split test` (walk-forward). Outputs go to `reports/`. Python 3.12, versions pinned in
 `requirements.txt`, fixed seed.
 
+Checked on 2026-10-12 from a clean clone of this repository (Windows 11, Python 3.12.2): all commands above ran
+without errors, 27 tests passed, and every regenerated file in `reports/` was identical to the committed one. In that
+check the dataset was cloned from a local copy at the same commit rather than from GitHub. On Windows, clone into a
+short path: the dataset repository fails with "Filename too long" under deeply nested directories.
+
 ## How this was built
 
 Development was AI-assisted (Claude Code). [CLAUDE.md](CLAUDE.md) is the guardrail file with the task definition
