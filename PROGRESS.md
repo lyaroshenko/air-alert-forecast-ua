@@ -8,6 +8,9 @@ Environment: `.venv` (gitignored), run with `.venv/Scripts/python`; dataset in `
   (`src/robustness.py`, D16–D17, README section 5, `reports/results_sep_check*.csv`, `reports/results_volunteer*.csv`).
 - **Reproduce check:** done 2026-10-12 from a clean clone in `%TEMP%/aaf-fresh` (deleted afterwards): `src.run --test`,
   both `src.robustness` checks and `pytest -q` (27 passed) ran clean; regenerated `reports/` identical to committed.
-- **In progress / next:** nothing. P1–P5 are complete and pushed to `main`.
+- **v2 (D18, README 5c):** `src/v2.py` extended features + recency weighting + capital-raion target, validation-only
+  selection, test as a disclosed second look. Result: no real change on the v1 target; capital-raion target gives
+  positive skill at all horizons. 32 tests pass. Not re-run from a clean clone.
+- **In progress / next:** nothing. P1–P5 and v2 are complete and pushed to `main`.
 - **Not done (outside the repo, user's task):** AI interaction log export and the reflection for the submission.
 - **Open issues:** `gh` CLI is not installed; push directly to `main`. `.idea/` is untracked on purpose.

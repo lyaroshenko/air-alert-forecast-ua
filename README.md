@@ -197,6 +197,52 @@ after the reform), so it is listed first, but 35 of its 128 alerts in this windo
 - **Kyiv City onset skill does not carry over** (ROC-AUC 0.51 here, 0.68 on official labels). Whether that is the
   later period or the noisier labels cannot be separated with this data.
 
+### 5c. Second model (v2): sharper features, recency weighting, capital-raion target
+
+Built after the results above, to test whether more could be squeezed out of the same data (D18). It is a separate
+model in `src/v2.py`; the headline pipeline is unchanged. **The test window had already been scored once, so these
+are second-look numbers.** Everything was chosen on validation.
+
+- **Features (67 instead of 28).** Each neighbour separately (running alert, its age, last-hour share, number of
+  running alerts), alert starts in the last 10 and 30 minutes among neighbours and nationwide, running-alert counts.
+  No raion adjacency map was available, so "adjacent raions" is approximated by the rest of the own oblast.
+- **Recency weighting.** Half-lives of 60 and 180 days were tried against no weighting. Validation preferred no
+  weighting for 10 of 12 models, so it is effectively off.
+- **Same target as v1: no real change.**
+
+| Oblast | Target | v1 Brier | v2 Brier | v1 ROC-AUC | v2 ROC-AUC | v2 skill vs baseline |
+|---|---|---|---|---|---|---|
+| Kyiv City | `y_h1` | 0.090 | 0.089 | 0.822 | 0.831 | +0.172 |
+| Kyiv City | `onset_h1` | 0.098 | 0.097 | 0.683 | 0.666 | +0.084 |
+| Odeska | `y_h1` | 0.168 | 0.169 | 0.777 | 0.770 | +0.266 |
+| Odeska | `onset_h1` | 0.255 | 0.254 | 0.526 | 0.524 | +0.007 |
+| Poltavska | `y_h1` | 0.144 | 0.142 | 0.831 | 0.843 | +0.382 |
+| Poltavska | `onset_h1` | 0.233 | 0.232 | 0.559 | 0.565 | +0.011 |
+
+  Over all 18 oblast-target pairs the Brier difference v2 − v1 ranges from -0.010 to +0.005 (mean -0.0016),
+  which is inside the noise of a four-week window. More detailed views of alert history do not add information.
+- **Capital-raion target: a better-posed question, same limits.** The target is "an alert covers the oblast
+  capital's raion" (oblast-wide alerts, or alerts in Odeskyi / Poltavskyi raion). It is less saturated: 46% of test
+  hours in Odeskyi raion against 64% for the whole oblast.
+
+| Capital raion | Target | Hours | Base rate | v2 Brier | v2 ROC-AUC | Baseline | Baseline Brier | Skill |
+|---|---|---|---|---|---|---|---|---|
+| Odeskyi | `y_h1` | 672 | 0.460 | 0.169 | 0.773 | recent rate 24 h | 0.252 | +0.329 |
+| Odeskyi | `onset_h1` | 529 | 0.314 | 0.216 | 0.555 | recent rate 24 h | 0.224 | +0.034 |
+| Odeskyi | `y_h3` | 672 | 0.719 | 0.185 | 0.694 | recent rate 7 d | 0.209 | +0.117 |
+| Odeskyi | `onset_h3` | 529 | 0.643 | 0.235 | 0.558 | recent rate 7 d | 0.237 | +0.008 |
+| Odeskyi | `y_h6` | 672 | 0.881 | 0.104 | 0.683 | recent rate 7 d | 0.111 | +0.065 |
+| Odeskyi | `onset_h6` | 529 | 0.849 | 0.131 | 0.585 | recent rate 7 d | 0.137 | +0.043 |
+| Poltavskyi | `y_h1` | 672 | 0.570 | 0.146 | 0.827 | persistence | 0.222 | +0.341 |
+| Poltavskyi | `onset_h1` | 438 | 0.340 | 0.224 | 0.560 | recent rate 7 d | 0.225 | +0.007 |
+| Poltavskyi | `y_h3` | 672 | 0.812 | 0.134 | 0.792 | recent rate 7 d | 0.156 | +0.141 |
+| Poltavskyi | `onset_h3` | 438 | 0.712 | 0.206 | 0.628 | recent rate 7 d | 0.212 | +0.027 |
+| Poltavskyi | `y_h6` | 672 | 0.935 | 0.065 | 0.757 | recent rate 7 d | 0.065 | +0.007 |
+| Poltavskyi | `onset_h6` | 438 | 0.900 | 0.097 | 0.582 | recent rate 7 d | 0.099 | +0.016 |
+
+  Skill is now positive at every horizon, including 6 h where v1 on the oblast target was negative. Onset at 1 h is
+  still close to the baselines (ROC-AUC 0.56). Kyiv City has no raions in the data, so its target is unchanged.
+
 ## 6. Limitations
 
 - **The test window is about six weeks old.** The official source stopped on 2026-09-07 and has an outage just
@@ -227,6 +273,8 @@ python -m venv .venv
 .venv/Scripts/python -m src.run --test
 .venv/Scripts/python -m src.robustness --check sep          # section 5a
 .venv/Scripts/python -m src.robustness --check volunteer    # section 5b
+.venv/Scripts/python -m src.v2 --split val                   # section 5c: selection on validation
+.venv/Scripts/python -m src.v2 --split test                  # section 5c: test, second look
 .venv/Scripts/python -m pytest -q
 ```
 
@@ -235,8 +283,8 @@ python -m venv .venv
 `src.evaluate --split test` (walk-forward). Outputs go to `reports/`. Python 3.12, versions pinned in
 `requirements.txt`, fixed seed.
 
-Checked on 2026-10-12 from a clean clone of this repository (Windows 11, Python 3.12.2): all commands above ran
-without errors, 27 tests passed, and every regenerated file in `reports/` was identical to the committed one. In that
+Checked on 2026-10-12 from a clean clone of this repository (Windows 11, Python 3.12.2): all commands above except the two `src.v2` ones
+(added later) ran without errors, 27 tests passed, and every regenerated file in `reports/` was identical to the committed one. In that
 check the dataset was cloned from a local copy at the same commit rather than from GitHub. On Windows, clone into a
 short path: the dataset repository fails with "Filename too long" under deeply nested directories.
 
@@ -258,6 +306,7 @@ src/train.py       LightGBM, validation-only model selection
 src/evaluate.py    metrics, walk-forward, plots
 src/run.py         run everything
 src/robustness.py  September and volunteer-file checks
+src/v2.py          second model: extended features, capital-raion target
 tests/             target, splits and purge rule, leakage, baselines
 reports/           result tables and figures
 ```

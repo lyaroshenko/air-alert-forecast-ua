@@ -64,9 +64,16 @@ def training_mask(df: pd.DataFrame, target: str, fit_end: pd.Timestamp, variant:
 
 
 def fit(df: pd.DataFrame, feature_cols: list[str], target: str, fit_end: pd.Timestamp, variant: str,
-        num_boost_round: int, params: dict, valid: pd.DataFrame | None = None, record: dict | None = None):
+        num_boost_round: int, params: dict, valid: pd.DataFrame | None = None, record: dict | None = None,
+        half_life_days: float | None = None):
+    """half_life_days: optional recency weighting, weight = 0.5 ** (age of the row at fit_end / half-life)."""
     mask = training_mask(df, target, fit_end, variant)
-    train_set = lgb.Dataset(make_X(df[mask], feature_cols), df.loc[mask, target].astype(int), categorical_feature=["oblast"])
+    weight = None
+    if half_life_days:
+        age_days = (fit_end - df.loc[mask, "t"]) / pd.Timedelta(days=1)
+        weight = np.power(0.5, age_days / half_life_days).to_numpy()
+    train_set = lgb.Dataset(make_X(df[mask], feature_cols), df.loc[mask, target].astype(int), weight=weight,
+                            categorical_feature=["oblast"])
     kwargs = {}
     if valid is not None:
         valid_set = lgb.Dataset(make_X(valid, feature_cols), valid[target].astype(int), reference=train_set)

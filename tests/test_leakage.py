@@ -97,3 +97,51 @@ def test_features_reproducible_from_truncated_real_alerts():
     sample = pd.DatetimeIndex(list(grid[rng.choice(len(grid), 25, replace=False)])
                               + list(recent[rng.choice(len(recent), 15, replace=False)]))
     assert_features_reproducible(alerts, grid, sample, build_features)
+
+
+# ---- v2: extended features and the capital-raion view (src/v2.py) ----
+
+def _v2_builder(target_def):
+    from src.v2 import capital_view, neighbours_for
+
+    def builder(alerts, oblast, grid):
+        view = capital_view(alerts) if target_def == "capital" else alerts
+        return build_features(view, oblast, grid, extended=True, neighbours=neighbours_for(target_def))
+    return builder
+
+
+def _with_levels(alerts: pd.DataFrame) -> pd.DataFrame:
+    rng = np.random.default_rng(RNG_SEED + 1)
+    level = rng.choice(["oblast", "raion"], len(alerts))
+    raion = np.where(level == "raion", rng.choice(["Odeskyi raion", "Poltavskyi raion", "Other raion"], len(alerts)), "")
+    return alerts.assign(level=level, raion=raion)
+
+
+@pytest.mark.parametrize("target_def", ["oblast", "capital"])
+def test_v2_features_reproducible_from_truncated_synthetic_alerts(target_def):
+    alerts = _with_levels(synthetic_alerts())
+    grid = hourly_grid(pd.Timestamp("2026-01-01", tz="UTC"), pd.Timestamp("2026-05-05", tz="UTC"))
+    sample = grid[np.random.default_rng(RNG_SEED).choice(len(grid), 40, replace=False)]
+    assert_features_reproducible(alerts, grid, sample, _v2_builder(target_def))
+
+
+@pytest.mark.skipif(not (PROCESSED_DIR / "alerts.parquet").exists(), reason="run `python -m src.data` first")
+@pytest.mark.parametrize("target_def", ["oblast", "capital"])
+def test_v2_features_reproducible_from_truncated_real_alerts(target_def):
+    alerts = pd.read_parquet(PROCESSED_DIR / "alerts.parquet")
+    grid = hourly_grid(alerts["started_at"].min().floor("h"), DATA_CUTOFF)
+    rng = np.random.default_rng(RNG_SEED)
+    recent = grid[grid >= TEST_START]
+    sample = pd.DatetimeIndex(list(grid[rng.choice(len(grid), 8, replace=False)]) + list(recent[rng.choice(len(recent), 8, replace=False)]))
+    assert_features_reproducible(alerts, grid, sample, _v2_builder(target_def))
+
+
+def test_capital_view_moves_only_non_capital_rows():
+    from src.v2 import REST, capital_view
+
+    alerts = pd.DataFrame({
+        "oblast": ["Odeska oblast"] * 4 + ["Kyiv City", "Sumska oblast"],
+        "level": ["oblast", "raion", "raion", "hromada", "oblast", "raion"],
+        "raion": ["", "Odeskyi raion", "Izmailskyi raion", "Odeskyi raion", "", "Sumskyi raion"]})
+    out = capital_view(alerts)["oblast"].tolist()
+    assert out == ["Odeska oblast", "Odeska oblast", "Odeska oblast" + REST, "Odeska oblast", "Kyiv City", "Sumska oblast"]

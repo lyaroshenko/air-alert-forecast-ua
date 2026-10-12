@@ -55,6 +55,7 @@ class AlertState:
         e = np.where(np.isnan(e), np.inf, e)  # end unknown -> still running
         order = np.argsort(s, kind="stable")
         s, e = s[order], e[order]
+        self.raw_s, self.raw_e = s, np.sort(e)
         if len(s):
             run_end = np.maximum.accumulate(e)
             first = np.concatenate([[True], s[1:] > run_end[:-1]])
@@ -89,6 +90,10 @@ class AlertState:
         k = self._last_started_before(x)
         return (k >= 0) & (self.e[np.maximum(k, 0)] >= x)
 
+    def n_running(self, x: np.ndarray) -> np.ndarray:
+        """Number of raw (unmerged) alerts that started before x and had not ended before x."""
+        return (np.searchsorted(self.raw_s, x, side="left") - np.searchsorted(self.raw_e, x, side="left")).astype(float)
+
     def current_alert_age(self, x: np.ndarray) -> np.ndarray:
         """Seconds since the running alert started; 0 when no alert is running."""
         if not len(self.s):
@@ -105,8 +110,17 @@ class AlertState:
         return np.where(j >= 0, x - self.e[jj], np.nan), np.where(j >= 0, self.e[jj] - self.s[jj], np.nan)
 
 
-def build_features(alerts: pd.DataFrame, oblast: str, grid: pd.DatetimeIndex) -> pd.DataFrame:
-    """Features for `oblast` at every forecast time in `grid`, from alerts of all oblasts."""
+MAX_NEIGHBOUR_SLOTS = 8  # slot 0 is reserved for "rest of the own oblast" (v2 capital-raion target)
+SHORT_WINDOWS_S = {"10m": 600.0, "30m": 1800.0}
+
+
+def build_features(alerts: pd.DataFrame, oblast: str, grid: pd.DatetimeIndex, extended: bool = False,
+                   neighbours: dict | None = None) -> pd.DataFrame:
+    """Features for `oblast` at every forecast time in `grid`, from alerts of all oblasts.
+
+    extended=True adds the v2 columns: each neighbour separately, 10/30-minute start counts, running-alert counts.
+    """
+    neighbours = NEIGHBOURS if neighbours is None else neighbours
     t = _seconds(grid)
     states = {name: AlertState(g["started_at"], g["finished_at"]) for name, g in alerts.groupby("oblast")}
     empty = AlertState([], [])
@@ -132,7 +146,7 @@ def build_features(alerts: pd.DataFrame, oblast: str, grid: pd.DatetimeIndex) ->
     out["dow_local"] = local.dayofweek.astype(float)
 
     others = sorted(set(states) - {oblast})
-    for prefix, names in (("nb", NEIGHBOURS.get(oblast, [])), ("nat", others)):
+    for prefix, names in (("nb", [n for n in neighbours.get(oblast, []) if n]), ("nat", others)):
         group = [states.get(name, empty) for name in names]
         if not group:
             continue
@@ -145,6 +159,20 @@ def build_features(alerts: pd.DataFrame, oblast: str, grid: pd.DatetimeIndex) ->
         if prefix == "nb":
             out["nb_frac_1h_max"] = frac_1h.max(axis=0)
             out["nb_frac_6h_mean"] = np.mean([st.frac(t - 6 * HOUR_S, t) for st in group], axis=0)
+        if extended:
+            for label, w in SHORT_WINDOWS_S.items():
+                out[f"{prefix}_starts_{label}"] = sum(st.starts_before(t) - st.starts_before(t - w) for st in group)
+            out[f"{prefix}_n_running"] = sum(st.n_running(t) for st in group)
+    if extended:
+        out["own_n_running"] = own.n_running(t)
+        slots = list(neighbours.get(oblast, []))[:MAX_NEIGHBOUR_SLOTS]
+        slots += [None] * (MAX_NEIGHBOUR_SLOTS - len(slots))
+        for i, name in enumerate(slots):
+            st = states.get(name, empty) if name else None
+            out[f"nb{i}_active"] = st.active(t).astype(float) if st else np.nan
+            out[f"nb{i}_age_min"] = st.current_alert_age(t) / 60 if st else np.nan
+            out[f"nb{i}_frac_1h"] = st.frac(t - HOUR_S, t) if st else np.nan
+            out[f"nb{i}_n_running"] = st.n_running(t) if st else np.nan
     return out
 
 

@@ -193,3 +193,29 @@ All numbers below come from scripts run on 2026-10-12 against
 - **Reading.** Same shape as the official test: skill on the primary target, none worth the name on onset. The
   Kyiv City onset skill seen on official labels (ROC-AUC 0.683) is not reproduced; later period and label noise
   cannot be told apart.
+
+## D18 · 2026-10-12 · Second model (v2), built after the first test results
+
+- **Issue.** Onset skill is near zero in Odeska and Poltavska and negative at 6 h (README section 4). Question: is
+  that a limit of the features, of the drift, or of the saturated target?
+- **Options tried, all in a separate model (`src/v2.py`) so the headline pipeline and its results stay as they were.**
+  (1) Extended features, 67 instead of 28: each neighbour separately (running, age, last-hour share, running-alert
+  count), starts in the last 10 / 30 minutes, running-alert counts. (2) Recency weighting with half-life 60 or 180
+  days vs none. (3) A second target, "alert covers the oblast capital's raion" (oblast-level alerts or alerts in
+  Odeskyi / Poltavskyi raion); the rest of the oblast becomes an extra neighbour in the features.
+- **Not done.** True raion adjacency across oblast borders: no verified adjacency map, and guessing one would break
+  rule 8. Rolling probability calibration: replaced by the simpler recency weighting.
+- **Leakage.** The truncation test runs on the extended features and on the capital-raion view, synthetic and real
+  data (`tests/test_leakage.py`, 32 tests in total). Same purge rule, same folds, same baselines refitted per fold.
+- **Chosen on validation only.** Tree settings as in D13. Per target: rounds from {50, 100, 200, 400} and half-life
+  from {none, 180, 60} by validation log-loss. No weighting won for 10 of 12 models (exceptions: oblast onset_h6 and
+  capital y_h1, both 180 days). Validation log-loss of v2 vs v1 on the oblast target: y_h1 0.3736 vs 0.3738,
+  onset_h1 0.4989 vs 0.4973, so no gain was expected before test was scored.
+- **Test contamination, stated.** The test window had been scored once for v1. v2 test numbers are a second look
+  and are labelled so in the README and in the script output.
+- **Result.** Oblast target: Brier v2 − v1 between -0.0095 and +0.0046 over 18 oblast-target pairs, i.e. no real
+  change. Capital-raion target: skill against the validation-chosen baseline is positive at every horizon
+  (Odeskyi: y_h1 +0.329, onset_h1 +0.034, y_h6 +0.065; Poltavskyi: y_h1 +0.341, onset_h1 +0.007, y_h6 +0.007).
+- **Reading.** Finer features over the same alert history add nothing; the limit is information, not model detail.
+  Changing the question to a less saturated target removes the negative skill at long horizons but does not make
+  onsets predictable.

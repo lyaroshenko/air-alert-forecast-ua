@@ -1,0 +1,54 @@
+{
+  "oblast": {
+    "y_h1": {
+      "half_life_days": null,
+      "rounds": 200
+    },
+    "onset_h1": {
+      "half_life_days": null,
+      "rounds": 100
+    },
+    "y_h3": {
+      "half_life_days": null,
+      "rounds": 200
+    },
+    "onset_h3": {
+      "half_life_days": null,
+      "rounds": 200
+    },
+    "y_h6": {
+      "half_life_days": null,
+      "rounds": 400
+    },
+    "onset_h6": {
+      "half_life_days": 180,
+      "rounds": 100
+    }
+  },
+  "capital": {
+    "y_h1": {
+      "half_life_days": 180,
+      "rounds": 100
+    },
+    "onset_h1": {
+      "half_life_days": null,
+      "rounds": 100
+    },
+    "y_h3": {
+      "half_life_days": null,
+      "rounds": 400
+    },
+    "onset_h3": {
+      "half_life_days": null,
+      "rounds": 400
+    },
+    "y_h6": {
+      "half_life_days": null,
+      "rounds": 400
+    },
+    "onset_h6": {
+      "half_life_days": null,
+      "rounds": 400
+    }
+  }
+}
