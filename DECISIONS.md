@@ -163,3 +163,33 @@ All numbers below come from scripts run on 2026-10-12 against
 - **Leakage check on the result.** No onset ROC-AUC is above 0.95 (highest per-oblast test value 0.683), so nothing
   looks too good. The y_h1 improvement over persistence comes entirely from hours with no running alert: when an
   alert is running both forecast ~1.
+
+## D16 · 2026-10-12 · Robustness check on 2026-09-03 → 2026-09-06 (after the outage)
+
+- **Issue.** The 4.6 days of official data after the outage (D3) are the freshest verified labels but were left out
+  of the headline test.
+- **Choice.** `python -m src.robustness --check sep`: the 2026-08-29 data cut is lifted for this run only (default
+  unchanged). Window 2026-09-03 00:00 → 2026-09-06 00:00 UTC, ending a day before the file's last record because
+  alerts still running at the end of the file were never written (D7). Models and the historical-rate baseline are
+  fitted with cut-off 2026-08-28 (purge rule), one fold, same configuration as D13/D14, nothing re-tuned.
+  The 31 outage-spanning alerts (start < 2026-08-30, end >= 2026-09-02; none in the three scored oblasts) are
+  removed from the features.
+- **Caveat, stated with the results.** Lookback windows partially cover the outage: 7-day and 30-day features,
+  seasonal naive and the 7-day recent rate throughout, the 24-hour ones for the first 14 hours.
+- **Result.** 72 hours per oblast (24–52 for onset). y_h1 skill against persistence: Kyiv City +0.399, Poltavska
+  +0.406; Odeska +0.101 against the 24 h recent rate. Odeska onset_h1 skill -0.130 (ROC-AUC 0.498). Skill of up to
+  +0.956 against the 7-day recent rate at 3 h / 6 h is an artefact of that baseline reading the outage as "no
+  alerts" and is not evidence about the model.
+
+## D17 · 2026-10-12 · Volunteer-file run on 2026-09-13 → 2026-10-11
+
+- **Issue.** The only data after 2026-09-07 is the volunteer file, rejected as primary source in D5.
+- **Choice.** `python -m src.robustness --check volunteer`: same features, targets, purge rule and four weekly
+  folds; model configuration from the official validation split (not re-tuned); comparison baseline chosen on the
+  volunteer validation window 2026-08-16 → 2026-09-13. Reported as a secondary result with the D5 warning.
+- **Result.** y_h1 skill +0.187 (Kyiv City), +0.199 (Odeska), +0.289 (Poltavska); onset_h1 skill -0.004, +0.021,
+  +0.024 with ROC-AUC 0.509, 0.572, 0.587. Of the Kyiv City alerts starting in the window, 35 of 128 have an imputed
+  30-minute end.
+- **Reading.** Same shape as the official test: skill on the primary target, none worth the name on onset. The
+  Kyiv City onset skill seen on official labels (ROC-AUC 0.683) is not reproduced; later period and label noise
+  cannot be told apart.

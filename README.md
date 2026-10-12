@@ -146,7 +146,58 @@ contribution on the test folds (`pred_contrib=True`).
 ![Importance, y_h1](reports/importance_y_h1.png)
 ![Importance, onset_h1](reports/importance_onset_h1.png)
 
-## 5. Limitations
+## 5. Robustness checks (not headline results)
+
+Both reuse the model configuration chosen on the official validation split; nothing was re-tuned.
+All horizons are in `reports/results_sep_check.csv` and `reports/results_volunteer.csv`.
+
+### 5a. Freshest official data: 2026-09-03 → 2026-09-06
+
+Three days after the outage, models fitted on data up to 2026-08-28 (D16). **Lookback windows partially cover an
+outage**: the 7-day and 30-day features, the seasonal-naive baseline and the 7-day recent-rate baseline all look
+into hours with no recorded alerts, and so do the 24-hour ones for the first 14 hours of the window. The 31 alerts that "span" the outage were
+removed from the features. The window stops a day before the end of the file because alerts still running at the
+end were never written.
+
+| Oblast | Target | Hours | Base rate | LightGBM Brier | LightGBM ROC-AUC | Baseline | Baseline Brier | Baseline ROC-AUC | Skill |
+|---|---|---|---|---|---|---|---|---|---|
+| Kyiv City | `y_h1` | 72 | 0.597 | 0.142 | 0.957 | persistence | 0.236 | 0.802 | +0.399 |
+| Kyiv City | `onset_h1` | 46 | 0.370 | 0.236 | 0.844 | historical rate | 0.330 | 0.499 | +0.285 |
+| Odeska | `y_h1` | 72 | 0.625 | 0.215 | 0.739 | recent rate 24 h | 0.239 | 0.553 | +0.101 |
+| Odeska | `onset_h1` | 52 | 0.481 | 0.298 | 0.498 | recent rate 24 h | 0.264 | 0.530 | -0.130 |
+| Poltavska | `y_h1` | 72 | 0.861 | 0.115 | 0.860 | persistence | 0.194 | 0.887 | +0.406 |
+| Poltavska | `onset_h1` | 24 | 0.583 | 0.348 | 0.429 | recent rate 7 d | 0.469 | 0.514 | +0.257 |
+
+- **Too small to rank methods.** 72 hours per oblast, 24–52 for the onset target.
+- **The clean comparison holds.** Against persistence, which does not look back into the outage, LightGBM keeps its
+  advantage on `y_h1` in Kyiv City and Poltavska (skill +0.40 and +0.41).
+- **Odeska onset still shows no skill** (ROC-AUC 0.50, skill −0.13), the same as in the main test.
+- **Skill against the 7-day recent rate at 3 h and 6 h is inflated** (up to +0.96 in the CSV): that baseline is
+  broken by the outage here, so those numbers say nothing about the model.
+- This was an unusually intense period: Kyiv City had an alert in 60% of hours, against 20% in the main test window.
+
+### 5b. Volunteer file: 2026-09-13 → 2026-10-11
+
+The same pipeline on `volunteer_data_en.csv`, four weekly folds (D17). **Labels cannot be verified for this window**
+because the official source had stopped, and after the raion reform this file files alerts under the wrong oblast
+for several oblasts (D5). Kyiv City is the least affected of the three (hourly Jaccard with the official file 0.638
+after the reform), so it is listed first, but 35 of its 128 alerts in this window have an imputed 30-minute end.
+
+| Oblast | Target | Hours | Base rate | LightGBM Brier | LightGBM ROC-AUC | Baseline | Baseline Brier | Baseline ROC-AUC | Skill |
+|---|---|---|---|---|---|---|---|---|---|
+| Kyiv City | `y_h1` | 672 | 0.286 | 0.149 | 0.682 | persistence | 0.183 | 0.680 | +0.187 |
+| Kyiv City | `onset_h1` | 603 | 0.204 | 0.165 | 0.509 | recent rate 7 d | 0.164 | 0.459 | -0.004 |
+| Odeska | `y_h1` | 672 | 0.408 | 0.196 | 0.692 | recent rate 24 h | 0.244 | 0.563 | +0.199 |
+| Odeska | `onset_h1` | 599 | 0.336 | 0.220 | 0.572 | recent rate 7 d | 0.225 | 0.494 | +0.021 |
+| Poltavska | `y_h1` | 672 | 0.438 | 0.178 | 0.754 | recent rate 7 d | 0.251 | 0.494 | +0.289 |
+| Poltavska | `onset_h1` | 559 | 0.324 | 0.217 | 0.587 | recent rate 7 d | 0.222 | 0.524 | +0.024 |
+
+- **Same shape as the official result.** Positive skill on `y_h1` in all three oblasts (+0.19 to +0.29) and no
+  meaningful skill on `onset_h1` (−0.004 to +0.024, ROC-AUC 0.51–0.59).
+- **Kyiv City onset skill does not carry over** (ROC-AUC 0.51 here, 0.68 on official labels). Whether that is the
+  later period or the noisier labels cannot be separated with this data.
+
+## 6. Limitations
 
 - **The test window is about six weeks old.** The official source stopped on 2026-09-07 and has an outage just
   before that, so 2026-07-31 → 2026-08-28 is the latest period with trustworthy labels (D1, D3).
@@ -158,13 +209,13 @@ contribution on the test folds (`pred_contrib=True`).
   overwrites the original start (D7).
 - **Alert history only.** No information about what is in the air, which is what actually drives onsets.
 
-## 6. Future work
+## 7. Future work
 
 - Text sources such as Telegram monitoring channels, using publish time only and ignoring edited posts.
 - Raion-level targets, which is how alerts have been issued since late 2025.
 - More oblasts, with an alert definition that is not saturated on the front line (for example oblast-wide share).
 
-## 7. Reproduce
+## 8. Reproduce
 
 ```bash
 git clone https://github.com/lyaroshenko/air-alert-forecast-ua.git
@@ -174,6 +225,8 @@ git -C external/ukrainian-air-raid-sirens-dataset checkout d10c80fa696bab42822b9
 python -m venv .venv
 .venv/Scripts/python -m pip install -r requirements.txt    # Linux/macOS: .venv/bin/python
 .venv/Scripts/python -m src.run --test
+.venv/Scripts/python -m src.robustness --check sep          # section 5a
+.venv/Scripts/python -m src.robustness --check volunteer    # section 5b
 .venv/Scripts/python -m pytest -q
 ```
 
@@ -199,6 +252,7 @@ src/baselines.py   persistence, seasonal naive, historical rate, recent rate
 src/train.py       LightGBM, validation-only model selection
 src/evaluate.py    metrics, walk-forward, plots
 src/run.py         run everything
+src/robustness.py  September and volunteer-file checks
 tests/             target, splits and purge rule, leakage, baselines
 reports/           result tables and figures
 ```
