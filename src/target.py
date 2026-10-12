@@ -2,7 +2,8 @@
 
 Conventions (t is the start of an hour, intervals are half-open [started_at, finished_at)):
 - alert_in_hour(t) = 1 if any alert overlaps [t, t+1h).
-- active_at(t)     = 1 if an alert started strictly before t and has not ended by t.
+- active_at(t)     = 1 if an alert started strictly before t and had not ended before t (end >= t).
+                     This is the state as known at t: an end message stamped exactly t is not yet seen.
 - y_h{H}(t)        = 1 if any alert overlaps [t, t+H). NaN when t+H runs past the end of the grid.
 - onset_h{H}(t)    = y_h{H}(t) on hours where active_at(t) == 0, NaN elsewhere. When no alert is active
                      at t, "any alert in [t, t+H)" and "a new alert starts in [t, t+H)" are the same event.
@@ -49,8 +50,8 @@ def build_targets(intervals: pd.DataFrame, grid: pd.DatetimeIndex, horizons=HORI
 
     # hour i covers [i, i+1): overlaps the alert iff floor(a) <= i < ceil(b)
     in_hour = covered(np.floor(a).astype(np.int64), np.ceil(b).astype(np.int64))
-    # instant i is inside the alert iff a < i < b, i.e. floor(a)+1 <= i <= ceil(b)-1
-    active = covered(np.floor(a).astype(np.int64) + 1, np.ceil(b).astype(np.int64))
+    # alert is known to be running at instant i iff a < i <= b, i.e. floor(a)+1 <= i <= floor(b)
+    active = covered(np.floor(a).astype(np.int64) + 1, np.floor(b).astype(np.int64) + 1)
 
     out = pd.DataFrame({"alert_in_hour": in_hour.astype(np.int8), "active_at": active.astype(np.int8)}, index=grid)
     out.index.name = "t"

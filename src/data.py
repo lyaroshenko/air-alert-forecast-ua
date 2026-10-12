@@ -102,12 +102,18 @@ def merge_intervals(alerts: pd.DataFrame) -> pd.DataFrame:
 
 
 def build(oblasts: list[str] = OBLASTS) -> tuple[pd.DataFrame, pd.DataFrame]:
-    alerts = load_alerts(oblasts=oblasts)
-    intervals = merge_intervals(alerts)
+    """Write alerts.parquet (all oblasts, for cross-oblast features) and intervals.parquet (selected oblasts)."""
+    alerts = load_alerts()
+    unknown = set(oblasts) - set(alerts["oblast"])
+    if unknown:
+        raise ValueError(f"oblasts not in data: {sorted(unknown)}")
+    selected = alerts[alerts["oblast"].isin(oblasts)]
+    logger.info("%-34s %7d of %7d alerts are in %s", "selected oblasts", len(selected), len(alerts), oblasts)
+    intervals = merge_intervals(selected)
     PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     alerts.to_parquet(PROCESSED_DIR / "alerts.parquet", index=False)
     intervals.to_parquet(PROCESSED_DIR / "intervals.parquet", index=False)
-    return alerts, intervals
+    return selected, intervals
 
 
 if __name__ == "__main__":

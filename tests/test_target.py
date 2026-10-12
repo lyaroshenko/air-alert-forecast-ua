@@ -61,11 +61,12 @@ def test_overlapping_alerts_count_once():
 
 
 def test_alert_on_exact_hour_boundaries():
-    # starts exactly at 02:00: not yet "active before" 02:00; ends exactly at 04:00: hour 04 is clear
+    # starts exactly at 02:00: not yet running before 02:00.
+    # ends exactly at 04:00: hour 04 has no alert, but the end is not yet known at 04:00, so active_at is 1
     out = build_targets(intervals(("02:00", "04:00")), GRID)
     assert col(out, "alert_in_hour") == [0, 0, 1, 1, 0, 0, 0, 0]
-    assert col(out, "active_at") == [0, 0, 0, 1, 0, 0, 0, 0]
-    assert col(out, "onset_h1") == [0, 0, 1, None, 0, 0, 0, 0]
+    assert col(out, "active_at") == [0, 0, 0, 1, 1, 0, 0, 0]
+    assert col(out, "onset_h1") == [0, 0, 1, None, None, 0, 0, 0]
 
 
 def test_alerts_outside_the_grid_are_clipped():

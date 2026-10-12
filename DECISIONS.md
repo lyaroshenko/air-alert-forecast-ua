@@ -87,3 +87,38 @@ All numbers below come from scripts run on 2026-10-12 against
 - **Consequence.** H = 1 h and the onset target are the informative ones; H = 6 h is reported but says little for
   those two oblasts. Historical-rate baselines fitted on all history will be badly calibrated, which makes the
   "all history vs recent only" comparison a required part of the evaluation, not an optional one.
+
+## D10 · 2026-10-12 · What "alert active at t" means
+
+- **Issue.** The first version of `target.py` used start < t < end. An alert whose end message is stamped exactly
+  at t would then count as "not active", although at t that end is not yet known (rule: only information strictly
+  before t). The leakage test's truncated view cannot reproduce that.
+- **Choice.** active_at(t) = started strictly before t and not ended before t (end >= t). Target-side `active_at`
+  and feature-side `active` are computed by different code and are equal on all 117,168 rows.
+
+## D11 · 2026-10-12 · Feature design: closed-form functions instead of rolling windows
+
+- **Options.** (a) hourly table + `shift(1).rolling()`; (b) evaluate F(x) = alert-seconds before x and
+  N(x) = alert starts before x directly from the alert intervals.
+- **Choice.** (b). Every feature at t evaluates F and N only at instants <= t, plus the running-alert state, which
+  needs the start and whether the end is >= t but never the end itself. The same function builds one row or the
+  whole grid, which is what makes the truncation test possible.
+- **Leakage test.** `tests/test_leakage.py` truncates the raw alerts at t (later starts removed, ends >= t erased),
+  rebuilds the features from that view, and compares with the full pipeline: 60 random hours on synthetic alerts,
+  40 on the real data (15 of them in the test window), for all three oblasts. A negative control adds a feature
+  that looks one hour ahead and checks that the same test rejects it.
+- **Cross-oblast features.** Neighbour and nationwide features use the other oblasts' state as known at t (running
+  alert, share of the last 1/6 h under alert, starts in the last 1/3 h). Nothing from [t, t+H) of any oblast is used.
+  Frontline oblasts are near-constant in these features (D8); they are kept and left for the model to ignore.
+
+## D12 · 2026-10-12 · Baseline definitions
+
+- Persistence = `active` at t. For the onset target it is constant 0 on every scored row, so its ROC-AUC is
+  undefined and its Brier score equals the base rate.
+- Seasonal naive = primary target one week earlier (also for onset targets, which are undefined on hours with a
+  running alert).
+- Recent rate = mean of the same target over the last 24 h / 7 d of hours whose outcome window closed by t
+  (`shift(H)` before `rolling`).
+- Historical rate = mean by oblast x local weekday x local hour, fitted on rows before the scored split.
+- All models are scored on identical rows; `evaluate.score` raises if a forecast is missing on a scored row.
+- Log-loss clips probabilities to [0.001, 0.999] so that hard 0/1 baselines stay finite.
