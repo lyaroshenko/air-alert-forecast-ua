@@ -1,0 +1,48 @@
+{
+  "param_set": "small",
+  "params": {
+    "num_leaves": 15,
+    "learning_rate": 0.05,
+    "min_child_samples": 200,
+    "feature_fraction": 0.8
+  },
+  "rounds": {
+    "y_h1": {
+      "all": 200,
+      "recent": 100
+    },
+    "onset_h1": {
+      "all": 100,
+      "recent": 50
+    },
+    "y_h3": {
+      "all": 200,
+      "recent": 100
+    },
+    "onset_h3": {
+      "all": 200,
+      "recent": 50
+    },
+    "y_h6": {
+      "all": 200,
+      "recent": 100
+    },
+    "onset_h6": {
+      "all": 200,
+      "recent": 100
+    }
+  },
+  "headline": {
+    "y_h1": "all",
+    "onset_h1": "recent",
+    "y_h3": "all",
+    "onset_h3": "recent",
+    "y_h6": "recent",
+    "onset_h6": "recent"
+  },
+  "param_set_mean_val_log_loss": {
+    "base": 0.45215,
+    "large": 0.45662,
+    "small": 0.45187
+  }
+}

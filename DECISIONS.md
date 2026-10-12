@@ -122,3 +122,44 @@ All numbers below come from scripts run on 2026-10-12 against
 - Historical rate = mean by oblast x local weekday x local hour, fitted on rows before the scored split.
 - All models are scored on identical rows; `evaluate.score` raises if a forecast is missing on a scored row.
 - Log-loss clips probabilities to [0.001, 0.999] so that hard 0/1 baselines stay finite.
+
+## D13 · 2026-10-12 · LightGBM setup and what was tuned (validation only)
+
+- **Model.** One binary LightGBM per target (y_h1, onset_h1, y_h3, onset_h3, y_h6, onset_h6), pooled over the three
+  oblasts with `oblast` as a categorical. Inputs are exactly the 28 columns of `features.parquet` plus `oblast`;
+  `train.make_X` asserts that no `y_*`, `onset_*`, `t`, `split`, `alert_in_hour` or `active_at` column gets in.
+  Onset models train and predict only on rows with `active == 0`. Seed 20261012, `deterministic=True`.
+- **Tried, on validation (fit on train, purge rule applied, score 2026-07-03 → 2026-07-31).** Three fixed settings,
+  learning_rate 0.05 and feature_fraction 0.8 in all: `base` (num_leaves 31, min_child_samples 100), `small` (15, 200),
+  `large` (63, 50); rounds in {25, 50, 100, 200, 400}. Mean over 6 targets x 2 training windows of the best pooled
+  validation log-loss: base 0.45215, small 0.45187, large 0.45662.
+- **Choice.** `small`. Rounds per target and window by validation log-loss: `all` 200 (onset_h1: 100); `recent` 100
+  (onset_h1 and onset_h3: 50). Stored in `reports/model_config.json`; every tried combination is in
+  `reports/model_selection_val.csv`.
+- **Reason.** The three settings are within 0.005 log-loss of each other, so the smallest one is taken. Nothing was
+  tuned after looking at test numbers.
+
+## D14 · 2026-10-12 · Training window: all history vs post-reform only
+
+- **Options.** `all` = every permitted row since 2022-03; `recent` = rows from 2025-11-01 only (17.6k rows instead
+  of 113k), the month the reform reached almost all oblasts (D6).
+- **Evidence (pooled validation log-loss, all / recent).** y_h1 0.3738 / 0.3773; onset_h1 0.5012 / 0.4973;
+  y_h3 0.4319 / 0.4353; onset_h3 0.5780 / 0.5762; y_h6 0.3553 / 0.3527; onset_h6 0.4723 / 0.4712.
+- **Choice.** Headline = lower validation log-loss: `all` for y_h1 and y_h3, `recent` for the other four. Both are
+  reported on test.
+- **Reading.** The differences are small (at most 0.004). Six times less data costs almost nothing, so the
+  pre-reform history adds little; the lagged-rate features already carry the regime.
+
+## D15 · 2026-10-12 · Purge rule and walk-forward protocol
+
+- **Purge rule.** A row at time s may be used in a fit with cut-off c only if s + H <= c, i.e. its outcome window
+  [s, s+H) closed before the model is used (`train.training_mask`, tested in `tests/test_splits.py`). The same rule
+  is applied to the historical-rate baseline.
+- **Walk-forward.** Test window 2026-07-31 → 2026-08-28, four weekly folds. For each fold both LightGBM variants and
+  the historical-rate baseline are refitted with cut-off = fold start (expanding window) and predict that week only.
+  Persistence, seasonal naive and recent rate need no fitting. All models are scored on identical rows.
+- **Skill score.** BSS = 1 - Brier(model) / Brier(baseline), where the baseline is the one with the lowest
+  VALIDATION Brier for that oblast and target (`reports/baselines_val.csv`), not the best one on test.
+- **Leakage check on the result.** No onset ROC-AUC is above 0.95 (highest per-oblast test value 0.683), so nothing
+  looks too good. The y_h1 improvement over persistence comes entirely from hours with no running alert: when an
+  alert is running both forecast ~1.
